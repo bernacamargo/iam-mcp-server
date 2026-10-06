@@ -22,3 +22,11 @@ jobs:
 
       - name: Build and test
         run: ./gradlew build --no-daemon
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build container image
+        run: docker build -t iam-mcp-server:ci .

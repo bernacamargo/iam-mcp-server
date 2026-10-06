@@ -65,8 +65,30 @@ MCP client (Claude, IDE agent, ...)
 └──────────────────────────────┘
 ```
 
+## Container
+
+```bash
+docker build -t iam-mcp-server .
+docker run -p 8080:8080 iam-mcp-server
+```
+
+Multi-stage build: Gradle + JDK 21 compile the boot jar, runtime image is JRE-only and runs as a non-root user.
+
+## Design notes
+
+**Why tools instead of raw APIs.** An agent with `getUser`/`requestAccess` discovers a typed, documented surface and can't invent endpoints. Tool descriptions carry the policy ("fails for suspended users...") so the LLM plans within it before a call is ever made.
+
+**Policy lives server-side, by design.** Tool descriptions help the agent *plan*; they don't *enforce* anything. The rules — only `ACTIVE` users receive access, assignments are unique, revocations require existing grants — are enforced in `IdentityService`, never trusted from the client.
+
+**Two error vocabularies.** Bad input (unknown ids) throws `IllegalArgumentException`; policy denials (suspended user, duplicate, revoke of unheld profile) throw `IllegalStateException`. The agent gets a precise, actionable error either way — and the distinction reads naturally in an audit-adjacent codebase.
+
+**Testable time.** The audit log stamps entries through an injected `java.time.Clock`, so tests pin `Clock.fixed(...)` and assert exact instants instead of sleeping or reaching for mocking libraries.
+
+**Persistence is a swap, not a rewrite.** The store is in-memory seed data, but tools depend on the service contract, not the storage. Adding Postgres (JPA/R2DBC) changes the infrastructure layer only.
+
 ## Roadmap
 
 - [x] **M1** — skeleton, read-only tools, CI
 - [x] **M2** — write operations (request/revoke access) with policy validation + audit log
-- [ ] **M3** — container image, releases, deep-dive documentation
+- [x] **M3** — container image, release automation, design notes
+- [ ] **Next** — Postgres persistence, OpenTelemetry traces, streamable-HTTP auth
