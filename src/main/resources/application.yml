@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: iam-mcp-server
+  ai:
+    mcp:
+      server:
+        name: iam-mcp-server
+        version: 0.1.0
+
+server:
+  port: 8080
