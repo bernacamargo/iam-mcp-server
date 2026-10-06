@@ -17,7 +17,7 @@ class McpToolsRegistrationTest(
     fun `context wires the identity tools as MCP tool callbacks`() {
         val callbacks = toolCallbackProvider.toolCallbacks
 
-        assertThat(callbacks).hasSize(3)
+        assertThat(callbacks).hasSize(6)
         assertThat(identityTools).isNotNull()
     }
 }

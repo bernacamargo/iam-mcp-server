@@ -15,6 +15,9 @@ The use case mirrors production IAM work: instead of an AI agent calling raw adm
 | `listUsers` | List workforce users, optionally filtered by status (`ACTIVE`, `SUSPENDED`, `PENDING_OFFBOARDING`) |
 | `getUser` | One user by id, including assigned access profiles |
 | `listAccessProfiles` | All access profiles with their entitlements |
+| `requestAccess` | Grant an access profile — server-side policy: only `ACTIVE` users, no duplicates |
+| `revokeAccess` | Remove an access profile the user currently holds |
+| `listAuditEntries` | Audit trail of every grant and revocation |
 
 ## Stack
 
@@ -43,7 +46,7 @@ Point any MCP client at it, e.g. Claude Code:
 }
 ```
 
-Then try: *"Which users have pending offboarding?"* or *"What access does Bruno Tavares have?"*
+Then try: *"Which users have pending offboarding?"*, *"What access does Bruno Tavares have?"*, or *"Grant Carla the finance read profile"* — and watch the policy engine refuse (she's suspended).
 
 ## Architecture
 
@@ -64,6 +67,6 @@ MCP client (Claude, IDE agent, ...)
 
 ## Roadmap
 
-- [x] **M1** — skeleton, three read-only tools, CI
-- [ ] **M2** — write operations (request/revoke access) with validation + audit log
+- [x] **M1** — skeleton, read-only tools, CI
+- [x] **M2** — write operations (request/revoke access) with policy validation + audit log
 - [ ] **M3** — container image, releases, deep-dive documentation

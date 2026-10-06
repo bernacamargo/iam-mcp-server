@@ -1,9 +1,13 @@
 package io.github.bernacamargo.iam.service
 
 import io.github.bernacamargo.iam.domain.AccessProfile
+import io.github.bernacamargo.iam.domain.AuditAction
+import io.github.bernacamargo.iam.domain.AuditEntry
 import io.github.bernacamargo.iam.domain.User
 import io.github.bernacamargo.iam.domain.UserStatus
+import java.time.Clock
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedDeque
 import org.springframework.stereotype.Service
 
 data class UserAccessSummary(val user: User, val accessProfiles: List<AccessProfile>)
@@ -11,12 +15,16 @@ data class UserAccessSummary(val user: User, val accessProfiles: List<AccessProf
 /**
  * In-memory identity store backing the MCP tools. Deliberately simple:
  * the point of this project is the MCP integration, not persistence.
+ *
+ * Business rules live here, not in the tool layer: agents get a typed,
+ * policy-enforced surface instead of raw store access.
  */
 @Service
-class IdentityService {
+class IdentityService(private val clock: Clock = Clock.systemUTC()) {
 
     private val users = ConcurrentHashMap<String, User>()
     private val accessProfiles = ConcurrentHashMap<String, AccessProfile>()
+    private val auditLog = ConcurrentLinkedDeque<AuditEntry>()
 
     init {
         seed()
@@ -40,6 +48,53 @@ class IdentityService {
         val user = getUser(userId)
         val profiles = user.accessProfileIds.map { getAccessProfile(it) }
         return UserAccessSummary(user, profiles)
+    }
+
+    fun listAuditEntries(): List<AuditEntry> = auditLog.toList()
+
+    /**
+     * Grants an access profile to a user.
+     * Policy: only ACTIVE users receive access, and assignments are unique.
+     */
+    fun requestAccess(userId: String, profileId: String): UserAccessSummary {
+        val user = requireUser(userId)
+        getAccessProfile(profileId) // validate existence up front
+
+        if (user.status != UserStatus.ACTIVE) {
+            throw IllegalStateException(
+                "Access request denied: user $userId is ${user.status}, only ACTIVE users can receive access",
+            )
+        }
+        if (profileId in user.accessProfileIds) {
+            throw IllegalStateException("Access request denied: user $userId already holds $profileId")
+        }
+
+        val updated = user.copy(accessProfileIds = user.accessProfileIds + profileId)
+        users[userId] = updated
+        audit(userId, profileId, AuditAction.ACCESS_REQUESTED, "granted")
+        return userAccessSummary(userId)
+    }
+
+    /** Removes an access profile from a user. Policy: the assignment must exist. */
+    fun revokeAccess(userId: String, profileId: String): UserAccessSummary {
+        val user = requireUser(userId)
+
+        if (profileId !in user.accessProfileIds) {
+            throw IllegalStateException("Revoke denied: user $userId does not hold $profileId")
+        }
+
+        users[userId] = user.copy(accessProfileIds = user.accessProfileIds - profileId)
+        audit(userId, profileId, AuditAction.ACCESS_REVOKED, "revoked")
+        return userAccessSummary(userId)
+    }
+
+    private fun requireUser(userId: String): User =
+        users[userId] ?: throw IllegalArgumentException("Unknown user: $userId")
+
+    private fun audit(userId: String, profileId: String, action: AuditAction, detail: String) {
+        auditLog.addLast(
+            AuditEntry(at = clock.instant(), action = action, userId = userId, profileId = profileId, detail = detail),
+        )
     }
 
     private fun seed() {
